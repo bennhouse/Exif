@@ -3,7 +3,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// ExifCleaner's window: the drop zone (empty state, then the file table), the status bar with
-/// the settings button, the summary and Clear, and the settings drawer (here an inspector).
+/// the settings button, the summary and Clear, and the settings drawer.
 struct ContentView: View {
     @ObservedObject var model = AppModel.shared
     @ObservedObject var settings = AppSettings.shared
@@ -41,9 +41,32 @@ struct ContentView: View {
             }
         }
         .animation(.easeOut(duration: 0.2), value: model.toast)
-        .inspector(isPresented: $showSettings) {
-            SettingsPanel { showSettings = false }
-                .inspectorColumnWidth(min: 280, ideal: 300, max: 380)
+        // Settings: ExifCleaner's drawer, sliding in over the list. The panel is always built (just
+        // off the window's edge), so when it slides in it is already laid out and doesn't flicker.
+        .overlay(alignment: .trailing) {
+            ZStack(alignment: .trailing) {
+                Color.black.opacity(showSettings ? 0.15 : 0)
+                    .contentShape(Rectangle())
+                    .onTapGesture { showSettings = false }
+                    .allowsHitTesting(showSettings)
+                SettingsPanel { showSettings = false }
+                    .frame(width: 320)
+                    .frame(maxHeight: .infinity)
+                    .background(Color(nsColor: .windowBackgroundColor))
+                    .overlay(alignment: .leading) { Rectangle().fill(Color(nsColor: .separatorColor)).frame(width: 1) }
+                    .shadow(color: .black.opacity(showSettings ? 0.2 : 0), radius: 14, x: -2)
+                    .offset(x: showSettings ? 0 : 360)
+                    .allowsHitTesting(showSettings)
+                    .accessibilityHidden(!showSettings)
+            }
+            .animation(.smooth(duration: 0.28), value: showSettings)
+        }
+        .onExitCommand { showSettings = false }
+        .task {
+            // Development aid: EXIF_SNAPSHOT_SETTINGS=1 opens the settings drawer 1.5 s after launch.
+            guard ProcessInfo.processInfo.environment["EXIF_SNAPSHOT_SETTINGS"] != nil else { return }
+            try? await Task.sleep(for: .milliseconds(1500))
+            showSettings = true
         }
         .environment(\.layoutDirection, I18n.shared.isRightToLeft ? .rightToLeft : .leftToRight)
         .id(settings.language)

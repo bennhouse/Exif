@@ -119,7 +119,6 @@ struct SettingsPanel: View {
                     Button(action: onClose) { Image(systemName: "xmark").font(.system(size: 12, weight: .semibold)) }
                         .buttonStyle(.borderless)
                         .help(t("settings.close"))
-                        .keyboardShortcut(.cancelAction)
                 }
                 section(t("appearance")) {
                     Picker(t("appearance"), selection: $settings.themeMode) {

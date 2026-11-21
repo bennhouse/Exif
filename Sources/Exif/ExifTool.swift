@@ -139,7 +139,8 @@ struct Metadata {
 
 /// The ExifTool arguments ExifCleaner uses (exiftool_adapter.ts / exif.ts).
 enum CleanArgs {
-    static let read = ["-args", "-G1:2:4", "-charset", "filename=utf8"]
+    // -a: every duplicate too (shown with -G4 as "Copy1"…), as ExifCleaner's -json output has them.
+    static let read = ["-a", "-args", "-G1:2:4", "-charset", "filename=utf8"]
 
     static let quickTimeDates = ["-QuickTime:CreateDate=", "-QuickTime:ModifyDate=", "-TrackCreateDate=",
                                  "-TrackModifyDate=", "-MediaCreateDate=", "-MediaModifyDate="]

@@ -7,6 +7,8 @@ struct ExifApp: App {
     var body: some Scene {
         Window("Exif", id: "main") {
             ContentView()
+                // No scroll bars anywhere: with "Always show" they took space and lists changed width.
+                .scrollIndicators(.never)
         }
         .defaultSize(width: 900, height: 580)
         .windowToolbarStyle(.unified(showsTitle: true))
@@ -15,15 +17,15 @@ struct ExifApp: App {
                 Button("Open…") { Intake.chooseFiles() }.keyboardShortcut("o")
                 Button("Open Folder…") { Intake.chooseFolder() }.keyboardShortcut("o", modifiers: [.command, .shift])
             }
-            // ExifCleaner's Settings menu item opens its drawer; here it opens the inspector.
-            CommandGroup(replacing: .appSettings) {
-                Button("Settings…") { NotificationCenter.default.post(name: .toggleSettings, object: nil) }
-                    .keyboardShortcut(",")
-            }
             CommandGroup(replacing: .help) {
                 Link("ExifCleaner Website", destination: URL(string: "https://exifcleaner.com")!)
                 Link("Source Code", destination: URL(string: "https://github.com/bennhouse/Exif")!)
             }
+        }
+
+        // Exif › Settings… (⌘,): a window of its own, as in the other apps of the suite.
+        Settings {
+            SettingsView()
         }
     }
 }
@@ -32,7 +34,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         LaunchTrace.mark("didFinishLaunching")
         MainActor.assumeIsolated {
-            AppSettings.shared.applyTheme()
             Snapshots.startIfRequested()
             // ExifTool (Perl) is started once the window is up, so launching never waits for it.
             DispatchQueue.main.async { AppModel.shared.warmUp() }
@@ -76,7 +77,7 @@ enum CLI {
                 guard !files.isEmpty, files.allSatisfy(\.isDone), !model.isProcessing else { return }
                 timer.invalidate()
                 for f in files {
-                    print("\(f.name)\t\(f.before.count) → \(f.after.count)\t\(f.outcome.map { "\($0)" } ?? "-")\t\(f.output?.lastPathComponent ?? "")\t\(f.error ?? "")")
+                    print("\(f.name)\t\(f.before.count) → \(f.after.count)\t\(f.outcome.map { "\($0)" } ?? "-")\t\(f.output?.lastPathComponent ?? "")\t\(f.error ?? "")\t\(f.note ?? "")")
                 }
                 print(String(format: "%d files in %.2f s", files.count, Date().timeIntervalSince(t0)))
                 model.shutdown()

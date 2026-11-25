@@ -21,6 +21,9 @@ final class FileEntry: ObservableObject, Identifiable {
     @Published var outputSize: Int64?
     @Published var error: String?
     @Published var failureSummary: String?
+    /// Shown under the name when the file was cleaned with a reservation (a PDF ExifTool cleaned
+    /// but Exif couldn't write again from scratch).
+    @Published var note: String?
 
     init(url: URL) {
         self.url = url
@@ -207,6 +210,7 @@ final class AppModel: ObservableObject {
             f.outputSize = r.outputSize
             f.error = r.error
             f.failureSummary = r.failureSummary
+            f.note = r.note
             f.outcome = r.outcome
             f.removed = r.removed
             switch r.outcome {
@@ -238,6 +242,7 @@ struct Job: Sendable {
         var removed = 0
         var error: String?
         var failureSummary: String?
+        var note: String?
     }
     enum Step: Sendable { case processing, done(Result) }
 
@@ -265,7 +270,8 @@ struct Job: Sendable {
         if r.before.count > 0 {
             let w = tool.run(CleanArgs.sanitize(source: path, destination: copy ? destination.path : nil, s: options))
             let err = w?.stderr.split(separator: "\n").first(where: { $0.hasPrefix("Error") }).map(String.init)
-            let updated = w?.stdout.contains("1 image files updated") == true || w?.stdout.contains("1 image files created") == true
+            // "copied": saving as a copy with nothing ExifTool could change; the copy is still made.
+            let updated = ["1 image files updated", "1 image files created", "1 image files copied"].contains { w?.stdout.contains($0) == true }
             if w == nil || err != nil || !updated {
                 if copy { try? FileManager.default.removeItem(at: destination) }
                 // Nothing to change is not a failure: the file stays as it was.
@@ -276,6 +282,28 @@ struct Job: Sendable {
                     r.failureSummary = t("writeFailedSummary")
                     r.error = err ?? w?.stderr.trimmingCharacters(in: .whitespacesAndNewlines) ?? "ExifTool stopped"
                     report(.done(r)); return
+                }
+            }
+            // PDFs: written again from scratch, so ExifTool's appended update can't be undone. Also
+            // when ExifTool found nothing to change: the file may hold an earlier ExifTool update.
+            if FileTypes.ext(url) == ".pdf" {
+                var target: URL? = outPath
+                if outPath != destination {
+                    // Unchanged, saving as a copy: the copy is the original's bytes, then rewritten.
+                    target = (try? FileManager.default.copyItem(at: url, to: destination)).map { destination }
+                }
+                if let target {
+                    do {
+                        if try PDFRewrite.run(target, keepDate: options.preserveTimestamps) == .textChanged {
+                            r.note = t("pdf.textChanged")
+                        }
+                        outPath = target
+                    } catch {
+                        if target != outPath { try? FileManager.default.removeItem(at: target) }
+                        r.note = t(error as? PDFRewrite.Failure == .signed ? "pdf.signed" : "pdf.rewriteFailed")
+                    }
+                } else {
+                    r.note = t("pdf.rewriteFailed")
                 }
             }
         } else if copy {
@@ -291,7 +319,16 @@ struct Job: Sendable {
         }
         r.output = outPath
         r.outputSize = (try? outPath.resourceValues(forKeys: [.fileSizeKey]).fileSize).map { Int64($0 ?? 0) }
-        if let a = tool.run(CleanArgs.read + [outPath.path]) { r.after = Metadata.parse(a.stdout) }
+        if let a = tool.run(CleanArgs.read + [outPath.path]) {
+            r.after = Metadata.parse(a.stdout)
+            // A PDF written by PDFKit gets a standard sRGB colour space, which ExifTool lists as an
+            // ICC profile: colour data, not the file's metadata, so it isn't counted.
+            if FileTypes.ext(url) == ".pdf", r.before.icc.isEmpty {
+                let icc = r.after.icc
+                r.after.fields.removeAll { icc.contains($0.key) }
+                r.after.icc = []
+            }
+        }
         let afterKeys = Set(r.after.fields.map(\.key))
         r.removed = r.before.fields.filter { !afterKeys.contains($0.key) }.count
         if !failed {

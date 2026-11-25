@@ -90,6 +90,8 @@ final class ExifTool: @unchecked Sendable {
 struct Metadata {
     var fields: [(key: String, value: String)] = []
     var error: String?
+    /// Keys read from an ICC profile (family-1 group ICC_Profile, ICC-header…).
+    var icc: Set<String> = []
 
     var count: Int { fields.count }
     func has(_ key: String) -> Bool { fields.contains { $0.key == key } }
@@ -109,11 +111,14 @@ struct Metadata {
             // ExifCleaner's display check: an Error, or a Warning that isn't "[minor]", makes the read fail.
             if parts.first == "ExifTool", tag == "Error" { m.error = value; continue }
             if parts.first == "ExifTool", tag == "Warning" {
-                if m.error == nil, !value.lowercased().hasPrefix("[minor]") { m.error = value }
+                // Except an unreadable XMP packet (seen in encrypted PDFs made by TCPDF): `-all=`
+                // drops it with the rest, so the file can still be cleaned.
+                if m.error == nil, !value.lowercased().hasPrefix("[minor]"), !value.hasPrefix("XMP format error") { m.error = value }
                 continue
             }
             if isComputed(parts) { continue }
             let key = parts.count >= 3 ? parts.dropFirst().joined(separator: ":") : parts.joined(separator: ":")
+            if parts.first?.hasPrefix("ICC") == true { m.icc.insert(key) }
             if let i = index[key] { m.fields[i].value = value } else { index[key] = m.fields.count; m.fields.append((key, value)) }
         }
         return m

@@ -2,12 +2,11 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// ExifCleaner's window: the drop zone (empty state, then the file table), the status bar with
-/// the settings button, the summary and Clear, and the settings drawer.
+/// ExifCleaner's window: the drop zone (empty state, then the file table) and the status bar with
+/// the summary and Clear. Settings are in their own window (⌘,).
 struct ContentView: View {
     @ObservedObject var model = AppModel.shared
-    @ObservedObject var settings = AppSettings.shared
-    @State private var showSettings = false
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         VStack(spacing: 0) {
@@ -27,7 +26,7 @@ struct ContentView: View {
                 return true
             }
             Divider()
-            StatusBar(model: model, showSettings: $showSettings)
+            StatusBar(model: model)
         }
         .overlay(alignment: .bottom) {
             if let toast = model.toast {
@@ -41,35 +40,12 @@ struct ContentView: View {
             }
         }
         .animation(.easeOut(duration: 0.2), value: model.toast)
-        // Settings: ExifCleaner's drawer, sliding in over the list. The panel is always built (just
-        // off the window's edge), so when it slides in it is already laid out and doesn't flicker.
-        .overlay(alignment: .trailing) {
-            ZStack(alignment: .trailing) {
-                Color.black.opacity(showSettings ? 0.15 : 0)
-                    .contentShape(Rectangle())
-                    .onTapGesture { showSettings = false }
-                    .allowsHitTesting(showSettings)
-                SettingsPanel { showSettings = false }
-                    .frame(width: 320)
-                    .frame(maxHeight: .infinity)
-                    .background(Color(nsColor: .windowBackgroundColor))
-                    .overlay(alignment: .leading) { Rectangle().fill(Color(nsColor: .separatorColor)).frame(width: 1) }
-                    .shadow(color: .black.opacity(showSettings ? 0.2 : 0), radius: 14, x: -2)
-                    .offset(x: showSettings ? 0 : 360)
-                    .allowsHitTesting(showSettings)
-                    .accessibilityHidden(!showSettings)
-            }
-            .animation(.smooth(duration: 0.28), value: showSettings)
-        }
-        .onExitCommand { showSettings = false }
         .task {
-            // Development aid: EXIF_SNAPSHOT_SETTINGS=1 opens the settings drawer 1.5 s after launch.
+            // Development aid: EXIF_SNAPSHOT_SETTINGS=1 opens the settings window 1.5 s after launch.
             guard ProcessInfo.processInfo.environment["EXIF_SNAPSHOT_SETTINGS"] != nil else { return }
             try? await Task.sleep(for: .milliseconds(1500))
-            showSettings = true
+            openSettings()
         }
-        .environment(\.layoutDirection, I18n.shared.isRightToLeft ? .rightToLeft : .leftToRight)
-        .id(settings.language)
         .frame(minWidth: 560, minHeight: 360)
         .navigationTitle("Exif")
         .toolbar {
@@ -80,12 +56,9 @@ struct ContentView: View {
                     .help(t("intake.chooseFolder"))
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .toggleSettings)) { _ in showSettings.toggle() }
         .onAppear { LaunchTrace.mark("window content appeared"); DispatchQueue.main.async { LaunchTrace.mark("first frame done") } }
     }
 }
-
-extension Notification.Name { static let toggleSettings = Notification.Name("exif.toggleSettings") }
 
 @MainActor
 enum Intake {
@@ -205,10 +178,10 @@ struct FileTable: View {
         HStack(spacing: 8) {
             Color.clear.frame(width: Col.status)
             h(t("table.header.name")).frame(maxWidth: .infinity, alignment: .leading)
-            h(t("table.header.type")).frame(width: Col.type, alignment: .leading)
-            h(t("table.header.size")).frame(width: Col.size, alignment: .leading)
-            h(t("table.header.before")).frame(width: Col.before, alignment: .leading)
-            h(t("table.header.after")).frame(width: Col.after, alignment: .leading)
+            h(t("table.header.type")).frame(width: Col.type)
+            h(t("table.header.size")).frame(width: Col.size)
+            h(t("table.header.before")).frame(width: Col.before)
+            h(t("table.header.after")).frame(width: Col.after)
         }
         .padding(.horizontal, 14)
         .frame(height: 30)
@@ -272,12 +245,13 @@ struct FileRowView: View {
             HStack(spacing: 8) {
                 statusCell.frame(width: Col.status)
                 nameCell.frame(maxWidth: .infinity, alignment: .leading)
-                TypePill(ext: file.ext).frame(width: Col.type, alignment: .leading)
-                sizeCell.frame(width: Col.size, alignment: .leading)
+                // Type, size, before and after: fixed widths on the right, centred; the name takes the rest.
+                TypePill(ext: file.ext).frame(width: Col.type)
+                sizeCell.frame(width: Col.size)
                 Text(file.status == .pending || file.status == .reading ? "–" : "\(file.before.count)")
                     .monospacedDigit().tone(.primary)
-                    .frame(width: Col.before, alignment: .leading)
-                afterCell.frame(width: Col.after, alignment: .leading)
+                    .frame(width: Col.before)
+                afterCell.frame(width: Col.after)
             }
             .padding(.leading, 14 + indent).padding(.trailing, 14)
             .frame(minHeight: 40)
@@ -313,6 +287,7 @@ struct FileRowView: View {
             if file.wroteCopy {
                 Text(t("writtenToCopy")).font(.caption).tone(.secondary).lineLimit(1)
             }
+            if let n = file.note { Text(n).font(.caption).foregroundStyle(.orange).lineLimit(2) }
             if let s = summary { Text(s).font(.caption).foregroundStyle(file.status == .error ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary)).lineLimit(2) }
         }
         .padding(.vertical, 6)
@@ -334,7 +309,8 @@ struct FileRowView: View {
         return Text(s).monospacedDigit().lineLimit(1).minimumScaleFactor(0.8).tone(.primary)
     }
 
-    @ViewBuilder private var afterCell: some View {
+    /// The count and ✓ centred in the column; the reveal arrow at its right edge on hover.
+    private var afterCell: some View {
         HStack(spacing: 5) {
             switch file.status {
             case .pending, .reading, .processing:
@@ -347,7 +323,9 @@ struct FileRowView: View {
                     .foregroundStyle(file.outcome == .cleaned ? Color.green : Color.secondary)
                     .transition(.scale.combined(with: .opacity))
             }
-            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity)
+        .overlay(alignment: .trailing) {
             if file.isDone, file.status != .error, hover {
                 Button {
                     NSWorkspace.shared.activateFileViewerSelecting([file.output ?? file.url])
@@ -473,15 +451,9 @@ struct MetadataExpansion: View {
 
 struct StatusBar: View {
     @ObservedObject var model: AppModel
-    @Binding var showSettings: Bool
 
     var body: some View {
         HStack(spacing: 12) {
-            Button { showSettings.toggle() } label: {
-                Image(systemName: "gearshape").font(.system(size: 15)).modifier(ToolbarDim())
-            }
-            .buttonStyle(.borderless)
-            .help(t("menu.app.settings"))
             Spacer()
             if model.hasFiles {
                 Text([t("statusBar.xOfYCleaned", ["completed": model.cleanedCount, "total": model.totalCount]),

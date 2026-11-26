@@ -353,7 +353,7 @@ struct TypePill: View {
         case "png": .green
         case "pdf": .red
         case "heic", "heif", "avif": .orange
-        case "mp4", "mov", "m4v", "avi", "3gp", "wmv", "m4a": .purple
+        case "mp4", "mov", "m4v", "avi", "3gp", "wmv", "m4a", "wav": .purple
         case "gif", "webp", "svg", "bmp": .teal
         case "tif", "tiff": .indigo
         default: .gray

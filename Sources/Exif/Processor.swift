@@ -267,7 +267,17 @@ struct Job: Sendable {
         report(.processing)
         let destination = copy ? reserve(url) : url
         var outPath = destination
-        if r.before.count > 0 {
+        if r.before.count > 0, FileTypes.ext(url) == ".wav" {
+            // ExifTool can't write WAV: written again natively with only the audio chunks.
+            do {
+                try WAVClean.run(source: url, destination: destination, keepDate: options.preserveTimestamps)
+            } catch {
+                r.outcome = .failed
+                r.failureSummary = t("writeFailedSummary")
+                r.error = error.localizedDescription
+                report(.done(r)); return
+            }
+        } else if r.before.count > 0 {
             let w = tool.run(CleanArgs.sanitize(source: path, destination: copy ? destination.path : nil, s: options))
             let err = w?.stderr.split(separator: "\n").first(where: { $0.hasPrefix("Error") }).map(String.init)
             // "copied": saving as a copy with nothing ExifTool could change; the copy is still made.

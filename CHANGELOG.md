@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- New icon, redrawn with the rest of the suite from one shared design (same glass parts, light, shadows and safe area on every icon).
+- WAV files are supported. ExifTool can read WAV but not write it, so Exif writes the file again itself, keeping only the format, audio, cue and sampler chunks (LIST/INFO, Broadcast WAV bext, iXML, XMP, ID3 and the rest are removed; the audio bytes are unchanged). RF64 files over 4 GB are not supported yet.
 - No scroll bars in lists (with "Always show" they took space and changed the lists' width).
 - Settings in a window of their own (Exif › Settings…, ⌘,) with only the cleaning options; no settings button in the status bar, no drawer.
 - Appearance always follows the system (the Light/Auto/Dark choice is gone).

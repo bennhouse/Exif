@@ -193,7 +193,7 @@ enum CleanArgs {
 enum FileTypes {
     static let supported: Set<String> = [".jpg", ".jpeg", ".png", ".gif", ".tiff", ".tif", ".webp", ".heic", ".heif", ".bmp",
                                          ".avif", ".svg", ".cr2", ".cr3", ".nef", ".arw", ".orf", ".rw2", ".raf", ".dng", ".pef",
-                                         ".srw", ".mp4", ".mov", ".avi", ".m4a", ".m4v", ".3gp", ".wmv", ".pdf"]
+                                         ".srw", ".mp4", ".mov", ".avi", ".m4a", ".m4v", ".3gp", ".wmv", ".wav", ".pdf"]
     static let raw: Set<String> = [".raf", ".cr2", ".cr3", ".nef", ".arw", ".orf", ".rw2", ".dng", ".pef", ".srw"]
     static let media: Set<String> = [".mp4", ".mov", ".avi", ".m4a", ".m4v", ".3gp", ".wmv"]
     static let tiff: Set<String> = [".tif", ".tiff"]
